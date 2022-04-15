@@ -1,0 +1,85 @@
+---
+    - name: Update apt packages
+      apt:
+        update_cache: yes
+      become: yes
+
+    - name: Install utilites
+      package: name={{ item }} state=present
+      become: yes
+      with_items:
+        - apt-transport-https
+        - ca-certificates
+        - curl
+        - bash-completion
+
+    - name: Add Kubernetes GPG key
+      shell: curl -fsSLo /usr/share/keyrings/kubernetes-archive-keyring.gpg https://packages.cloud.google.com/apt/doc/apt-key.gpg
+      become: yes
+
+    - name: Add Kubernetes repository
+      shell: echo "deb [signed-by=/usr/share/keyrings/kubernetes-archive-keyring.gpg] https://apt.kubernetes.io/ kubernetes-xenial main" | sudo tee /etc/apt/sources.list.d/kubernetes.list
+      become: yes
+
+    - name: Update apt
+      apt:
+        update_cache: yes
+      become: yes
+
+    - name: Install kubelet, kubeadm, kubectl from new repo
+      package: name={{ item }} state=present
+      become: yes
+      with_items:
+        - kubelet
+        - kubeadm
+        - kubectl
+
+    - name: Add bash-completion to bashrc
+      shell: "echo 'source <(kubectl completion bash)' >>$HOME/.bashrc"
+
+    - name: Reset Kubernetes component
+      shell: "kubeadm reset --force"
+      become: yes
+      ignore_errors: True
+
+    - name: Copy script add_bridge.sh
+      template:
+        src: "add_bridge.sh"
+        dest: "/home/mike/add_bridge.sh"
+        mode: 0777
+        owner: mike
+        group: mike
+      become: yes
+
+    - name: Run script add_bridge.sh
+      shell: "/home/mike/add_bridge.sh"
+      become: yes
+      become_user: root
+
+    - name: Delete script add_bridge.sh
+      shell: "rm /home/mike/add_bridge.sh"
+      become: yes
+      become_user: root
+
+    - name: Sysctl --system
+      shell: "sysctl --system"
+      become: yes
+
+    - name: Enable and restart Kubelet
+      service:
+        name: kubelet
+        enabled: yes
+        state: restarted
+      become: yes
+
+    - name: Systemctl daemon-reload
+      become: yes
+      become_user: root
+      systemd:
+        daemon_reload: yes
+
+    - name: Restart Docker
+      service:
+        name: docker
+        state: restarted
+      become: yes

@@ -1,0 +1,11 @@
+---
+- name: Install soft
+  apt: name={{ item }} state=latest
+  become: yes
+  with_items:
+    - curl
+    - net-tools
+    - git
+    - nmap
+    - wget
+    - telnet

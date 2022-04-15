@@ -1,0 +1,158 @@
+---
+# Парсинг айпишников
+    - name: Check internal_ip kube0
+      shell: "cat /etc/hosts | grep kube0 | awk '{print $1}' | tail -1"
+      register: internal_ip_kube0
+
+    - name: Check internal_ip kube1
+      shell: "cat /etc/hosts | grep kube1 | awk '{print $1}' | tail -1"
+      register: internal_ip_kube1
+
+    - name: Check internal_ip kube2
+      shell: "cat /etc/hosts | grep kube2 | awk '{print $1}' | tail -1"
+      register: internal_ip_kube2
+
+#    - name: Check internal_ip kube3
+#      shell: "cat /etc/hosts | grep kube3 | awk '{print $1}' | tail -1"
+#      register: internal_ip_kube3
+
+# Сброс настроек kube0
+    - name: Reset Kubernetes component
+      shell: "sudo kubeadm reset --force"
+      become: yes
+      ignore_errors: True
+
+    - name: Delete dir HOME/.kube
+      shell: "rm -rf $HOME/.kube"
+
+# Старт главной мастер ноды
+    - name: Start kubeadm init on the master host kube0
+      shell: "sudo kubeadm init --config=/home/{{ ansible_user }}/kubeadm-init-test.yaml"
+      register: start_master
+      become: yes
+    - debug: var=start_master.stdout_lines
+
+    - name: mkdir -p HOME/.kube
+      shell: "mkdir -p $HOME/.kube"
+
+    - name: sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+      shell: "sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config"
+
+    - name: sudo chown $(id -u):$(id -g) $HOME/.kube/config
+      shell: "sudo chown $(id -u):$(id -g) $HOME/.kube/config"
+
+# Копирование pki ключей после старта мастер ноды на вторую мастер ноду
+
+    - name: copy pki to dir HOME/pki
+      shell: "mkdir -p $HOME/pki; sudo cp -r /etc/kubernetes/pki/{{ item }} $HOME/pki/; sudo chown -R mike:mike $HOME/pki/"
+      with_items:
+        - ca.crt
+        - ca.key
+        - front-proxy-ca.crt
+        - front-proxy-ca.key
+        - sa.key
+        - sa.pub
+
+    - name: mkdir pki on the kube1
+      command: ssh {{ internal_ip_kube1.stdout }} "mkdir -p $HOME/pki"
+
+    - name: Scp pki kube0 to kube1
+      command: "scp $HOME/pki/{{ item }} {{ internal_ip_kube1.stdout }}:$HOME/pki/"
+      with_items:
+        - ca.crt
+        - ca.key
+        - front-proxy-ca.crt
+        - front-proxy-ca.key
+        - sa.key
+        - sa.pub
+
+    - name: Check token list
+      shell: "sudo kubeadm token list | tail -1 | awk '{print $1}'"
+      register: token_list
+      become: yes
+
+    - name: Check ca.crt sha256
+      shell: "openssl x509 -pubkey -in /etc/kubernetes/pki/ca.crt | openssl rsa -pubin -outform der 2>/dev/null | openssl dgst -sha256 -hex | sed 's/^.* //'"
+      register: token_sha
+      become: yes
+
+# Сброс кубернетес на kube1, копирование ключей и старт второй мастер ноды
+    - name: Reset Kubernetes kube1
+      command: ssh {{ internal_ip_kube1.stdout }}  "sudo kubeadm reset --force; sudo mkdir -p /etc/kubernetes/pki/; sudo chown -R mike:mike /etc/kubernetes/pki/; sudo cp -r $HOME/pki/ /etc/kubernetes/; sudo chown -R root:root /etc/kubernetes/pki/"
+
+    - name: Delete dir kube1 /home/mike/.kube
+      command: ssh {{ internal_ip_kube1.stdout }} "rm -rf $HOME/.kube"
+
+    - name: Start kubeadm init on the master host kube1
+      command: ssh {{ internal_ip_kube1.stdout }}  "sudo kubeadm init --config=/home/{{ ansible_user }}/kubeadm-init-test.yaml"
+      register: result
+    - debug: var=result.stdout_lines
+
+    - name: mkdir -p $HOME/.kube kube1
+      command: ssh {{ internal_ip_kube1.stdout }} "mkdir -p $HOME/.kube"
+
+    - name: sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config kube1
+      command: ssh {{ internal_ip_kube1.stdout }} "sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config"
+
+    - name: sudo chown $(id -u):$(id -g) $HOME/.kube/config kube1
+      command: ssh {{ internal_ip_kube1.stdout }} "sudo chown $(id -u):$(id -g) $HOME/.kube/config"
+
+# Старт слейв нод
+
+    - name: Reset Kubernetes kube2
+      command: ssh  {{ internal_ip_kube2.stdout }}  "sudo kubeadm reset --force; rm -rf $HOME/.kube"
+
+#    - name: Reset Kubernetes kube3
+#      command: ssh  {{ internal_ip_kube3.stdout }}  "sudo kubeadm reset --force; rm -rf $HOME/.kube"
+
+    - name: Run join slave-node-kube2
+      command: ssh {{ internal_ip_kube2.stdout }} "sudo kubeadm join {{ internal_ip_kube0.stdout }}:6443 --token {{ token_list.stdout }} --discovery-token-ca-cert-hash sha256:{{ token_sha.stdout }}"
+      register: joinkube2
+    - debug: var=joinkube2.stdout_lines
+
+#    - name: Run join slave-node-kube3
+#      command: ssh {{ internal_ip_kube3.stdout }} "sudo kubeadm join {{ internal_ip_kube0.stdout }}:6443 --token {{ token_list.stdout }} --discovery-token-ca-cert-hash sha256:{{ token_sha.stdout }}"
+#      register: joinkube3
+#    - debug: var=joinkube3.stdout_lines
+
+# Запуск сети
+    - name: Not ready > Ready cluster
+      shell: "kubectl apply -f https://docs.projectcalico.org/manifests/calico.yaml"
+      register: ready_nodes
+    - debug: var=ready_nodes.stdout_lines
+
+    - name: Kubectl get nodes
+      shell: "sleep 10; kubectl get nodes"
+      register: get_nodes
+    - debug: var=get_nodes.stdout_lines
+
+    - name: Add ingress controller
+      shell: "kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.1.0/deploy/static/provider/baremetal/deploy.yaml"
+      register: add_ing_controller
+    - debug: var=add_ing_controller.stdout_lines
+
+    - name: Delete webhook to ingress controller
+      shell: "kubectl delete validatingwebhookconfigurations ingress-nginx-admission"
+      register: del_webhook_ing_controller
+    - debug: var=del_webhook_ing_controller.stdout_lines
+
+    - name: View kubectl get svc ingress-nginx-controller -n ingress-nginx
+      shell: "kubectl get svc ingress-nginx-controller -n ingress-nginx"
+      register: view_ing
+    - debug: var=view_ing.stdout_lines
+
+    - name: Create patch-ing-controller
+      shell: |
+             cat > $HOME/patch-ing-controller.sh <<' EOF'
+             #!/bin/bash
+             kubectl patch service ingress-nginx-controller -n ingress-nginx -p '{"spec": {"type": "LoadBalancer", "externalIPs":["{{ internal_ip_kube0.stdout }}"]}}'
+
+    - name: Start patch svc ingress-nginx-controller
+      shell: "chmod 777 $HOME/patch-ing-controller.sh; $HOME/patch-ing-controller.sh;" #rm $HOME/patch-ing-controller.sh"
+
+    - name: View kubectl get svc ingress-nginx-controller -n ingress-nginx
+      shell: "kubectl get svc ingress-nginx-controller -n ingress-nginx"
+      register: view_ing2
+    - debug: var=view_ing2.stdout_lines
+
+      

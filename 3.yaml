@@ -1,0 +1,5 @@
+---
+- hosts:
+    - kube1
+  roles:
+    - start_kubeadm_kube1

@@ -1,0 +1,43 @@
+---
+# Парсинг айпишников
+    - name: Check internal_ip or hosts
+      shell: "hostname -I | cut -d' ' -f1"
+      register: internal_ip
+
+    - name: Check internal_ip kube0
+      shell: "cat /etc/hosts | grep kube0 | awk '{print $1}' | tail -1"
+      register: internal_ip_kube0
+
+    - name: Check internal_ip kube1
+      shell: "cat /etc/hosts | grep kube1 | awk '{print $1}' | tail -1"
+      register: internal_ip_kube1
+
+    - name: Check internal_ip kube2
+      shell: "cat /etc/hosts | grep kube2 | awk '{print $1}' | tail -1"
+      register: internal_ip_kube2
+
+    - name: Create kubeadm-init config
+      shell:
+           cmd: |
+             cat > $HOME/kubeadm-init-test.yaml << EOF
+             apiVersion: kubeadm.k8s.io/v1beta3
+             kind: InitConfiguration
+             localAPIEndpoint:
+               advertiseAddress: {{ internal_ip.stdout }}
+             ---
+             apiVersion: kubeadm.k8s.io/v1beta3
+             kind: ClusterConfiguration
+             kubernetesVersion: stable
+             apiServer:
+               certSANs:
+               - 127.0.0.1
+               - {{ internal_ip_kube0.stdout }}
+               - {{ internal_ip_kube1.stdout }}
+             controlPlaneEndpoint: {{ internal_ip.stdout }}
+             etcd:
+               external:
+                 endpoints:
+                 - http://kube0:2379 
+                 - http://kube1:2379
+             networking:
+               podSubnet: 10.11.0.0/16

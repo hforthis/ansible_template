@@ -1,0 +1,14 @@
+---
+- name: Add Docker repository.
+  get_url:
+     url: https://download.docker.com/linux/centos/docker-ce.repo
+     dest: /etc/yum.repos.d/docker-ce.repo
+
+- name: Install Docker
+  yum: name=docker state=latest
+
+- name: Install Docker-compose
+  yum: name=docker-compose state=latest
+
+- name: Start and enable the Docker daemon
+  service: name=docker state=started enabled=yes

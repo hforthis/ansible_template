@@ -1,0 +1,47 @@
+---
+    - name: Reset Kubernetes component
+      shell: "sudo kubeadm reset --force"
+      become: yes
+      ignore_errors: True
+
+    - name: Delete dir /home/mike/.kube
+      shell: "rm -rf /home/mike/.kube"
+
+    - name: Copy pki
+      copy:
+        dest: /etc/kubernetes/pki/
+        src: ~/course-devops/kubernetes/ansible/pki/kube0/etc/kubernetes/pki/{{ item }}
+      with_items:
+        - ca.crt
+        - ca.key
+        - front-proxy-ca.crt
+        - front-proxy-ca.key
+        - sa.key
+        - sa.pub
+      become: yes
+      become_user: root
+
+    - name: Start kubeadm init on the master hosts
+      shell: "sudo kubeadm init --config=/home/mike/kubeadm-init-test.yaml"
+      register: result
+      become: yes
+    - debug: var=result.stdout_lines
+
+    - name: mkdir -p $HOME/.kube
+      shell: "mkdir -p $HOME/.kube"
+
+    - name: sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+      shell: "sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config"
+
+    - name: sudo chown $(id -u):$(id -g) $HOME/.kube/config
+      shell: "sudo chown $(id -u):$(id -g) $HOME/.kube/config"
+
+    - name: Not ready > Ready cluster
+      shell: "kubectl apply -f https://raw.githubusercontent.com/coreos/flannel/master/Documentation/kube-flannel.yml"
+      register: ready_nodes
+    - debug: var=ready_nodes.stdout
+
+    - name: Kubectl get nodes
+      shell: "kubectl get nodes"
+      register: get_nodes
+    - debug: var=get_nodes.stdout_lines

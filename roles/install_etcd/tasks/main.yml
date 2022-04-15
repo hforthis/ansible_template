@@ -1,0 +1,40 @@
+---
+- name: Install etcd
+  apt: name=etcd state=latest
+  become: yes
+
+- name: Stop etcd
+  service:
+    name: etcd
+    state: stopped
+  become: yes
+
+- name: Copy etcd config files
+  template:
+     src: "etcd.conf"
+     dest: "/etc/default/etcd"
+  become: yes
+
+- name: Remove default config
+  shell: rm -rf /var/lib/etcd/*
+  become: yes
+
+- name: Create etcd data directory
+  file:
+    path: "/var/lib/etcd"
+    state: directory
+    mode: 0777
+  become: yes
+
+- name: Enable and start etcd
+  service:
+    name: etcd
+    enabled: yes
+    state: started
+  become: yes
+
+- name: Check etcd member list
+  command: etcdctl member list
+  register: result
+- debug: var=result.stdout_lines
+

@@ -1,0 +1,8 @@
+---
+- hosts:
+    - slave
+  roles:
+    - add_hosts
+    - install_soft
+    - install_docker
+    - install_kubeadm

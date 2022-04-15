@@ -1,0 +1,8 @@
+[all]
+[master]
+kube0
+kube1
+[slave]
+kube2
+[gitlab]
+kube-gitlab

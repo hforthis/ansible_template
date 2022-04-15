@@ -1,0 +1,53 @@
+---
+    - name: Install utilites
+      package: name={{ item }} state=present
+      become: yes
+      with_items:
+        - apt-transport-https
+        - ca-certificates
+        - gnupg
+
+    - name: Add Docker GPG key
+      apt_key:
+        url: https://download.docker.com/linux/debian/gpg
+      become: yes
+
+    - name: Add Docker repository
+      apt_repository:
+        repo: "deb [arch=amd64] https://download.docker.com/linux/debian buster stable"
+        update_cache: true
+      become: yes
+
+    - name: Install Docker from our new repo.
+      package: name={{ item }} state=present
+      become: yes
+      with_items:
+        - docker-ce
+        - docker-ce-cli
+        - containerd.io
+
+    - name: Copy Docker cgroup daemon.json config files
+      template:
+        src: "daemon.json"
+        dest: "/etc/docker/daemon.json"
+      become: yes
+
+    - name: Systemctl daemon-reload
+      become: yes
+      become_user: root
+      systemd:
+        daemon_reload: yes
+
+    - name: Enable and restart Docker
+      service:
+        name: docker
+        enabled: yes
+        state: restarted
+      become: yes
+
+    - name: Add user Mike to group docker
+      become: yes
+      shell: sudo usermod -aG docker mike
+
+
+

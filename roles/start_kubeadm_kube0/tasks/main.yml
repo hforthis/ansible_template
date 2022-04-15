@@ -1,0 +1,66 @@
+---
+    - name: Reset Kubernetes component
+      shell: "sudo kubeadm reset --force"
+      become: yes
+      ignore_errors: True
+
+    - name: Delete dir /home/mike/.kube
+      shell: "rm -rf /home/mike/.kube"
+
+    - name: Start kubeadm init on the master hosts
+      shell: "sudo kubeadm init --config=/home/mike/kubeadm-init-test.yaml"
+      register: result
+      become: yes
+    - debug: var=result.stdout_lines
+
+    - name: mkdir -p $HOME/.kube
+      shell: "mkdir -p $HOME/.kube"
+
+    - name: sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+      shell: "sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config"
+
+    - name: sudo chown $(id -u):$(id -g) $HOME/.kube/config
+      shell: "sudo chown $(id -u):$(id -g) $HOME/.kube/config"
+
+    - name: Copy pki
+      fetch:
+        src: /etc/kubernetes/pki/{{ item }}
+        dest: ~/course-devops/kubernetes/ansible/pki
+      with_items:
+        - ca.crt
+        - ca.key
+        - front-proxy-ca.crt
+        - front-proxy-ca.key
+        - sa.key
+        - sa.pub
+      become: yes
+      become_user: root
+
+    - name: Check internal_ip or hosts
+      shell: "hostname -I | cut -d' ' -f1"
+      register: internal_ip
+
+    - name: Check token list
+      shell: "sudo kubeadm token list | tail -1 | awk '{print $1}'"
+      register: token_list
+      become: yes
+
+    - name: Check ca.crt sha256
+      shell: "openssl x509 -pubkey -in /etc/kubernetes/pki/ca.crt | openssl rsa -pubin -outform der 2>/dev/null | openssl dgst -sha256 -hex | sed 's/^.* //'"
+      register: token_sha
+      become: yes
+
+    - name: Create connectworker-node.sh
+      shell:
+           cmd: |
+             cat > /home/mike/connectworker-node.sh << EOF
+             #!/bin/bash
+             sudo kubeadm join {{ internal_ip.stdout }}:6443 --token {{ token_list.stdout }} --discovery-token-ca-cert-hash sha256:{{ token_sha.stdout }}
+             EOF
+
+    - name: Copy connectworker-node.sh
+      fetch:
+        src: /home/mike/connectworker-node.sh
+        dest: ~/course-devops/kubernetes/ansible/
+      become: yes
+

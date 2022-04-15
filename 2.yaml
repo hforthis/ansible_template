@@ -1,0 +1,5 @@
+---
+- hosts:
+    - slave
+  roles:
+    - start_kubeadm_slave

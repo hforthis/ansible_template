@@ -1,0 +1,14 @@
+---
+# Парсинг айпишников
+    - name: Check internal_ip kube0
+      shell: "cat /etc/hosts | grep kube0 | awk '{print $1}' | tail -1"
+      register: internal_ip_kube0
+
+    - name: Create patch-ing-controller
+      shell: |
+             cat > $HOME/patch-ing-controller.sh <<' EOF'
+             #!/bin/bash
+             kubectl patch service ingress-nginx-controller -n ingress-nginx -p '{"spec": {"type": "LoadBalancer", "externalIPs":["{{ internal_ip_kube0.stdout }}"]}}'
+
+    - name: Start patch svc ingress-nginx-controller
+      shell: "chmod 777 $HOME/patch-ing-controller.sh; $HOME/patch-ing-controller.sh; rm $HOME/patch-ing-controller.sh"

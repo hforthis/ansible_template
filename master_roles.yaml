@@ -1,0 +1,10 @@
+---
+- hosts:
+    - master
+  roles:
+    - add_hosts
+    - install_soft
+    - install_etcd
+    - install_docker
+    - install_kubeadm
+    - add_kubeadm_init_config
