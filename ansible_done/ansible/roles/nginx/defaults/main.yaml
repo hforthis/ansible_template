@@ -1,0 +1,18 @@
+---
+# defaults file for nginx
+etc_nginx: "/etc/nginx"
+nginx_env: "~/ansible/roles/nginx/templates"
+nginx_conf_path: "{%- if ansible_distribution == 'Ubuntu' or ansible_distribution == 'Debian' -%}
+    /etc/nginx/sites-enabled
+  {%- elif ansible_distribution == 'RedHat' or ansible_distribution == 'CentOS' -%}
+    /etc/nginx/conf.d
+  {%- else -%}
+    NONE
+  {%- endif -%}"
+nginx_user: "{%- if ansible_distribution == 'Ubuntu' or ansible_distribution == 'Debian' -%}
+    www-data
+  {%- elif ansible_distribution == 'RedHat' or ansible_distribution == 'CentOS' -%}
+    nginx
+  {%- else -%}
+    NONE
+  {%- endif -%}"

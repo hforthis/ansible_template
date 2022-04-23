@@ -1,0 +1,5 @@
+---
+- hosts:
+    - nginx_test
+  roles:
+    - nginx

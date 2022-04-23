@@ -1,0 +1,4 @@
+# TEST
+[nginx_test]
+deb2-vb ansible_host=192.168.56.103
+deb1-vb ansible_host=192.168.56.102

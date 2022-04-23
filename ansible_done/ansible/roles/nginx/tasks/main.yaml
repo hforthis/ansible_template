@@ -1,0 +1,120 @@
+---
+#- name: For Deb-based.
+#  block: ##### Deb-based #####
+#   - name: Install nginx Deb-based
+#     apt:
+#        pkg: nginx
+#     become: yes
+#  when: ansible_os_family == "Debian" or ansible_os_family == "Ubuntu"
+
+#- name: For Centos
+#  block: ##### CentOS #####
+#   - name: Install EPEL
+#     yum: 
+#        pkg: epel-release
+#     become: yes
+#   - name: Install Nginx CentOS
+#     yum:
+#        pkg: nginx
+#     become: yes
+#  when: ansible_os_family == "CentOS" or ansible_os_family == "RedHat"
+
+- name: Backup current configs
+  community.general.archive:
+    path: "{{ etc_nginx }}/"
+    dest: "/tmp/nginx_conf-{{ ansible_date_time.epoch }}.tgz"
+    mode: '0640'
+  register: archive_results
+
+#- name: Add nginx configs
+#  ansible.builtin.template:
+#    src: "{{ item.src }}"
+#    dest: "{{ item.dest }}"
+#    mode: 0640
+#    become: yes
+#  loop:
+#    - { src: '{{ nginx_env }}/nginx.j2',dest: '{{ etc_nginx }}/nginx.conf' }
+
+- name: Add nginx configs
+  ansible.builtin.template:
+    src: "{{item}}.j2"
+    dest: "{{ etc_nginx }}/{{item}}.conf"
+    mode:  0644
+  become: true
+  loop:
+    - nginx
+
+- name: Add nginx conf to conf.d 
+  ansible.builtin.template:   
+    src: "{{item}}.j2"  
+    dest: "{{ nginx_conf_path }}/{{item}}.conf"
+    mode:  0644        
+  become: true     
+  loop:                                               
+    - b2b2c-dev
+
+
+- name: Create include nginx directory
+  ansible.builtin.file:
+    path: "{{ etc_nginx }}/includes"
+    state: directory
+    mode: 0755
+  become: yes
+
+
+- name: Add nginx conf to includes
+  ansible.builtin.template:
+    src: "{{item}}.j2"
+    dest: "{{ etc_nginx }}/includes/{{item}}.conf"
+    mode:  0644
+  become: true
+  loop:
+    - proxy-OKD
+
+
+- name: Check and apply or rollback nginx config
+  block:
+    - name: Check nginx config
+      ansible.builtin.shell: 'nginx -t'
+      args:
+        warn: no
+      register: nginx_config_status
+      changed_when: False
+      become: yes
+
+    - name: Reload nginx
+      ansible.builtin.systemd:
+        name: nginx
+        state: reloaded
+      become: yes
+  rescue:
+    - name: Clean nginx config
+      ansible.builtin.file:
+        path: "{{ etc_nginx }}/"
+        state: absent
+      become: yes  
+
+    - name: Create nginx directory
+      ansible.builtin.file:
+        path: "{{ etc_nginx }}"
+        state: directory
+        mode: 0755
+      become: yes
+
+    - name: Restore if incorrect new configs
+      ansible.builtin.unarchive:
+        src: "{{ archive_results.dest }}"
+        dest: "{{ etc_nginx }}"
+        remote_src: yes
+      become: yes
+
+    - name: Delete uncorrect backup
+      ansible.builtin.file:
+        path: "{{ archive_results.dest }}"
+        state: absent
+      become: yes
+
+    - name: Set failure
+      ansible.builtin.fail:
+        msg: Nginx test config fail. ERROR:{{ nginx_config_status.stderr }}
+      become: yes
